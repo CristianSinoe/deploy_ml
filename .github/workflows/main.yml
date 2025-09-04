@@ -11,6 +11,7 @@ on:
 jobs:
   ml_ci_cd:
     runs-on: ubuntu-latest
+    environment: deploy_ml_env   # 🔑 Necesario porque tus secrets están en este Environment
     strategy:
       matrix:
         python-version: [ "3.8" ]
@@ -33,13 +34,6 @@ jobs:
       - name: train model
         run: python model/train.py
 
-      # ---- Verificación explícita de secrets (fallará con mensaje claro) ----
-      - name: Check required secrets
-        run: |
-          test -n "${{ secrets.DOCKER_USER }}" || (echo "Missing DOCKER_USER" && exit 1)
-          test -n "${{ secrets.MODEL_NAME }}" || (echo "Missing MODEL_NAME" && exit 1)
-          test -n "${{ secrets.DOCKER_PASSWORD }}" || (echo "Missing DOCKER_PASSWORD" && exit 1)
-
       - name: docker build (sha tag)
         run: docker build -t "${{ secrets.DOCKER_USER }}/${{ secrets.MODEL_NAME }}:${{ github.sha }}" .
 
@@ -52,12 +46,8 @@ jobs:
       - name: docker push (sha)
         run: docker push "${{ secrets.DOCKER_USER }}/${{ secrets.MODEL_NAME }}:${{ github.sha }}"
 
-      # ---- Opcional: mantener una etiqueta estable 'latest' ----
       - name: docker tag latest
         run: docker tag "${{ secrets.DOCKER_USER }}/${{ secrets.MODEL_NAME }}:${{ github.sha }}" "${{ secrets.DOCKER_USER }}/${{ secrets.MODEL_NAME }}:latest"
 
       - name: docker push latest
         run: docker push "${{ secrets.DOCKER_USER }}/${{ secrets.MODEL_NAME }}:latest"
-
-
-
