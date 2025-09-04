@@ -1,41 +1,63 @@
 name: Modelops deploy
+
 on:
   push:
     branches: [ master ]
   pull_request:
     branches: [ master ]
   repository_dispatch:
-    types: [ml_ci_cd]
+    types: [ ml_ci_cd ]
+
 jobs:
   ml_ci_cd:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.8]
+        python-version: [ "3.8" ]
+
     steps:
-    - uses: actions/checkout@v3
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
           python-version: ${{ matrix.python-version }}
-    - name: list 
-      run: python --version
-    - name: pip install
-      run: pip install -r requirements.txt
-    - name: train model
-      run: python model/train.py
-    - name: docker build
-      run: docker build -t ${{secrets.DOCKER_USER}}/${{secrets.MODEL_NAME}}:${{github.sha}} .
-    - name: show images
-      run: docker images
-    - name: docker login
-      env:
-        DOCKER_USER: ${{secrets.DOCKER_USER}}
-        DOCKER_PASSWORD: ${{secrets.DOCKER_PASSWORD}}
-      run: |
-        docker login -u $DOCKER_USER -p $DOCKER_PASSWORD 
-    - name: docker Push
-      run: docker push ${{secrets.DOCKER_USER}}/${{secrets.MODEL_NAME}}:${{ github.sha }}
+
+      - name: list
+        run: python --version
+
+      - name: pip install
+        run: pip install -r requirements.txt
+
+      - name: train model
+        run: python model/train.py
+
+      # ---- Verificación explícita de secrets (fallará con mensaje claro) ----
+      - name: Check required secrets
+        run: |
+          test -n "${{ secrets.DOCKER_USER }}" || (echo "Missing DOCKER_USER" && exit 1)
+          test -n "${{ secrets.MODEL_NAME }}" || (echo "Missing MODEL_NAME" && exit 1)
+          test -n "${{ secrets.DOCKER_PASSWORD }}" || (echo "Missing DOCKER_PASSWORD" && exit 1)
+
+      - name: docker build (sha tag)
+        run: docker build -t "${{ secrets.DOCKER_USER }}/${{ secrets.MODEL_NAME }}:${{ github.sha }}" .
+
+      - name: show images
+        run: docker images | head -n 20
+
+      - name: docker login
+        run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USER }}" --password-stdin
+
+      - name: docker push (sha)
+        run: docker push "${{ secrets.DOCKER_USER }}/${{ secrets.MODEL_NAME }}:${{ github.sha }}"
+
+      # ---- Opcional: mantener una etiqueta estable 'latest' ----
+      - name: docker tag latest
+        run: docker tag "${{ secrets.DOCKER_USER }}/${{ secrets.MODEL_NAME }}:${{ github.sha }}" "${{ secrets.DOCKER_USER }}/${{ secrets.MODEL_NAME }}:latest"
+
+      - name: docker push latest
+        run: docker push "${{ secrets.DOCKER_USER }}/${{ secrets.MODEL_NAME }}:latest"
 
 
 
