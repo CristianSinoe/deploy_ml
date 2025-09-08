@@ -15,6 +15,9 @@ jobs:
     strategy:
       matrix:
         python-version: [ "3.8" ]
+    env:
+      # Usa el sha enviado en client_payload.sha (si viene); si no, usa github.sha (comportamiento actual)
+      TAG_SHA: ${{ github.event.client_payload.sha || github.sha }}
 
     steps:
       - name: Checkout
@@ -32,16 +35,19 @@ jobs:
         run: pip install -r requirements.txt
         
       - name: download dataset
-        run: wget -O data/heart_disease.csv ${{github.event.client_payload.dataseturl}}
+        run: wget -O data/heart_disease.csv ${{ github.event.client_payload.dataseturl }}
+
       - name: cat dataset
         run: cat data/heart_disease.csv
 
+      - name: resolve image tag
+        run: echo "Using image tag:$TAG_SHA"
 
       - name: train model
         run: python model/train.py
 
       - name: docker build (sha tag)
-        run: docker build -t "${{ secrets.DOCKER_USER }}/${{ secrets.MODEL_NAME }}:${{ github.sha }}" .
+        run: docker build -t "${{ secrets.DOCKER_USER }}/${{ secrets.MODEL_NAME }}:$TAG_SHA" .
 
       - name: show images
         run: docker images | head -n 20
@@ -50,10 +56,11 @@ jobs:
         run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USER }}" --password-stdin
 
       - name: docker push (sha)
-        run: docker push "${{ secrets.DOCKER_USER }}/${{ secrets.MODEL_NAME }}:${{ github.sha }}"
+        run: docker push "${{ secrets.DOCKER_USER }}/${{ secrets.MODEL_NAME }}:$TAG_SHA"
 
       - name: docker tag latest
-        run: docker tag "${{ secrets.DOCKER_USER }}/${{ secrets.MODEL_NAME }}:${{ github.sha }}" "${{ secrets.DOCKER_USER }}/${{ secrets.MODEL_NAME }}:latest"
+        run: docker tag "${{ secrets.DOCKER_USER }}/${{ secrets.MODEL_NAME }}:$TAG_SHA" "${{ secrets.DOCKER_USER }}/${{ secrets.MODEL_NAME }}:latest"
 
       - name: docker push latest
         run: docker push "${{ secrets.DOCKER_USER }}/${{ secrets.MODEL_NAME }}:latest"
+
